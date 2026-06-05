@@ -16,22 +16,33 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
-import { mockCurrentProfile as currentUser } from '@/data/mockData';
-
-const mockNotificationCount = 5;
+import { useAuthStore } from '@/stores/authStore';
+import { useNotifications } from '@/hooks/useNotifications';
+import { signOut } from '@/lib/actions/auth';
 
 export default function Navbar() {
   const { mobileMenuOpen, setMobileMenuOpen, toggleSidebar } = useUIStore();
+  const { profile: currentUser, logout } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const initials = currentUser.display_name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+  const { data: notifications = [] } = useNotifications();
+  const unreadNotificationCount = notifications.filter((n) => !n.is_read).length;
+
+  const initials = currentUser?.display_name
+    ? currentUser.display_name
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'U';
+
+  const handleSignOut = async () => {
+    await signOut();
+    logout();
+  };
 
   return (
     <header className="sticky top-0 z-50 glass-strong border-b border-white/5">
@@ -96,107 +107,131 @@ export default function Navbar() {
           </motion.button>
 
           {/* Notifications */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="relative flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-vc-dark-700 hover:text-white"
-            aria-label="Notifications"
-          >
-            <Bell size={18} />
-            {mockNotificationCount > 0 && (
-              <span className="absolute -top-0.5 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-vc-red-500 px-1 font-body text-[10px] font-bold text-white">
-                {mockNotificationCount}
-              </span>
-            )}
-          </motion.button>
+          <Link href="/notifications">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-vc-dark-700 hover:text-white"
+              aria-label="Notifications"
+            >
+              <Bell size={18} />
+              {unreadNotificationCount > 0 && (
+                <span className="absolute -top-0.5 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-vc-red-500 px-1 font-body text-[10px] font-bold text-white">
+                  {unreadNotificationCount}
+                </span>
+              )}
+            </motion.button>
+          </Link>
 
           {/* Messages */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-vc-dark-700 hover:text-white"
-            aria-label="Messages"
-          >
-            <MessageSquare size={18} />
-          </motion.button>
+          <Link href="/messages">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-vc-dark-700 hover:text-white"
+              aria-label="Messages"
+            >
+              <MessageSquare size={18} />
+            </motion.button>
+          </Link>
 
           {/* Divider */}
           <div className="mx-2 hidden h-6 w-px bg-white/10 sm:block" />
 
           {/* User Avatar Dropdown */}
-          <div className="relative" ref={userMenuRef}>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-vc-dark-700"
-            >
-              {/* Avatar */}
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-vc-red-500 to-vc-purple-500 font-display text-xs font-bold text-white">
-                {initials}
-              </div>
-              <div className="hidden flex-col items-start sm:flex">
-                <span className="text-sm font-medium text-gray-200">
-                  {currentUser.display_name}
-                </span>
-                <span className="text-[11px] text-vc-cyan-500">
-                  {currentUser.rank}
-                </span>
-              </div>
-              <ChevronDown
-                size={14}
-                className={cn(
-                  'hidden text-gray-500 transition-transform duration-200 sm:block',
-                  userMenuOpen && 'rotate-180'
+          {currentUser ? (
+            <div className="relative" ref={userMenuRef}>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-vc-dark-700"
+              >
+                {/* Avatar */}
+                {currentUser.avatar_url ? (
+                  <img
+                    src={currentUser.avatar_url}
+                    alt={currentUser.display_name}
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-vc-red-500 to-vc-purple-500 font-display text-xs font-bold text-white">
+                    {initials}
+                  </div>
                 )}
-              />
-            </motion.button>
+                <div className="hidden flex-col items-start sm:flex">
+                  <span className="text-sm font-medium text-gray-200">
+                    {currentUser.display_name}
+                  </span>
+                  <span className="text-[11px] text-vc-cyan-500">
+                    {currentUser.rank || 'Bronze I'}
+                  </span>
+                </div>
+                <ChevronDown
+                  size={14}
+                  className={cn(
+                    'hidden text-gray-500 transition-transform duration-200 sm:block',
+                    userMenuOpen && 'rotate-180'
+                  )}
+                />
+              </motion.button>
 
-            {/* Dropdown */}
-            <AnimatePresence>
-              {userMenuOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                  transition={{ duration: 0.15, ease: 'easeOut' }}
-                  className="glass-strong absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-xl shadow-2xl shadow-black/40"
-                >
-                  <div className="border-b border-white/5 p-3">
-                    <p className="text-sm font-medium text-white">
-                      {currentUser.display_name}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      @{currentUser.username}
-                    </p>
-                  </div>
-                  <div className="p-1">
-                    <DropdownItem
-                      href={`/profile/${currentUser.username}`}
-                      icon={<User size={16} />}
-                      label="Profile"
-                      onClick={() => setUserMenuOpen(false)}
-                    />
-                    <DropdownItem
-                      href="/settings"
-                      icon={<Settings size={16} />}
-                      label="Settings"
-                      onClick={() => setUserMenuOpen(false)}
-                    />
-                  </div>
-                  <div className="border-t border-white/5 p-1">
-                    <DropdownItem
-                      href="/login"
-                      icon={<LogOut size={16} />}
-                      label="Sign out"
-                      variant="danger"
-                      onClick={() => setUserMenuOpen(false)}
-                    />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+              {/* Dropdown */}
+              <AnimatePresence>
+                {userMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="glass-strong absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-xl shadow-2xl shadow-black/40"
+                  >
+                    <div className="border-b border-white/5 p-3">
+                      <p className="text-sm font-medium text-white">
+                        {currentUser.display_name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        @{currentUser.username}
+                      </p>
+                    </div>
+                    <div className="p-1">
+                      <DropdownItem
+                        href={`/profile/${currentUser.username}`}
+                        icon={<User size={16} />}
+                        label="Profile"
+                        onClick={() => setUserMenuOpen(false)}
+                      />
+                      <DropdownItem
+                        href="/settings"
+                        icon={<Settings size={16} />}
+                        label="Settings"
+                        onClick={() => setUserMenuOpen(false)}
+                      />
+                    </div>
+                    <div className="border-t border-white/5 p-1">
+                      <button
+                        onClick={handleSignOut}
+                        className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors text-vc-red-400 hover:bg-vc-red-500/10 hover:text-vc-red-500"
+                      >
+                        <LogOut size={16} />
+                        Sign out
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          ) : (
+            <Link href="/login">
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className="px-4 py-1.5 bg-gradient-to-r from-vc-red-500 to-vc-red-600 rounded-xl text-xs font-semibold text-white"
+              >
+                Log In
+              </motion.button>
+            </Link>
+          )}
         </div>
       </div>
     </header>

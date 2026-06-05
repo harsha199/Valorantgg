@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, use } from 'react';
 import { motion } from 'framer-motion';
 import {
   MapPin,
@@ -17,12 +17,14 @@ import {
   Heart,
 } from 'lucide-react';
 import { PostCard } from '@/components/feed/PostCard';
-import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { StatCard } from '@/components/profile/StatCard';
 import { GameBadge } from '@/components/profile/GameBadge';
-import { mockProfiles, mockPosts, mockClips, mockCurrentProfile } from '@/data/mockData';
-import { cn } from '@/lib/utils';
-import { formatNumber } from '@/lib/utils';
+import { mockClips } from '@/data/mockData';
+import { cn, formatNumber } from '@/lib/utils';
+import { useProfile, useToggleFollow } from '@/hooks/useProfile';
+import { useAuthStore } from '@/stores/authStore';
+import { useQuery } from '@tanstack/react-query';
+import { FeedSkeleton } from '@/components/feed/FeedSkeleton';
 
 const tabs = ['Posts', 'Clips', 'Stats'] as const;
 
@@ -31,13 +33,65 @@ export default function ProfilePage({
 }: {
   params: Promise<{ username: string }>;
 }) {
+  const { username } = use(params);
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>('Posts');
+  const { profile: currentUserProfile } = useAuthStore();
 
-  // For demo, always show user-1 profile
-  const profile = mockCurrentProfile;
-  const isOwnProfile = true;
-  const userPosts = mockPosts.filter((p) => p.author_id === profile.id);
+  const { data: profile, isLoading: isProfileLoading, isError } = useProfile(username);
+
+  // Fetch only this user's posts
+  const { data: postsData, isLoading: isPostsLoading } = useQuery({
+    queryKey: ['user-posts', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return { data: [] };
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*, author:profiles(*), likes!left(id, user_id)')
+        .eq('author_id', profile.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return {
+        data: (data || []).map((post: any) => ({
+          ...post,
+          is_liked: currentUserProfile ? post.likes.some((l: any) => l.user_id === currentUserProfile.id) : false,
+        }))
+      };
+    },
+    enabled: !!profile?.id,
+  });
+
+  const toggleFollowMutation = useToggleFollow();
+
+  if (isProfileLoading) {
+    return (
+      <div className="max-w-4xl mx-auto w-full py-12">
+        <FeedSkeleton />
+      </div>
+    );
+  }
+
+  if (isError || !profile) {
+    return (
+      <div className="max-w-4xl mx-auto w-full text-center py-12">
+        <h2 className="text-xl font-bold text-red-500">Profile Not Found</h2>
+        <p className="text-gray-400 mt-2">The user @{username} does not exist.</p>
+      </div>
+    );
+  }
+
+  const isOwnProfile = currentUserProfile?.id === profile.id;
+  const userPosts = postsData?.data || [];
   const userClips = mockClips.filter((c) => c.user_id === profile.id);
+
+  const handleFollowToggle = () => {
+    toggleFollowMutation.mutate({
+      targetUserId: profile.id,
+      username: profile.username,
+      isCurrentlyFollowing: !!profile.is_following,
+    });
+  };
 
   return (
     <div className="max-w-4xl mx-auto w-full">
@@ -49,7 +103,15 @@ export default function ProfilePage({
       >
         {/* Banner */}
         <div className="h-48 bg-gradient-to-br from-vc-red-500/30 via-vc-purple-500/20 to-vc-cyan-500/30 relative">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,70,85,0.3),transparent_70%)]" />
+          {profile.banner_url ? (
+            <img
+              src={profile.banner_url}
+              alt="Banner"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,70,85,0.3),transparent_70%)]" />
+          )}
         </div>
 
         {/* Profile Info */}
@@ -57,11 +119,17 @@ export default function ProfilePage({
           {/* Avatar */}
           <div className="relative -mt-16 mb-4 flex items-end justify-between">
             <div className="relative">
-              <img
-                src={profile.avatar_url || ''}
-                alt={profile.display_name}
-                className="w-28 h-28 rounded-full border-4 border-vc-dark-800 bg-vc-dark-600"
-              />
+              {profile.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.display_name}
+                  className="w-28 h-28 rounded-full border-4 border-vc-dark-800 bg-vc-dark-600 object-cover"
+                />
+              ) : (
+                <div className="w-28 h-28 rounded-full border-4 border-vc-dark-800 bg-gradient-to-br from-vc-red-500 to-vc-purple-500 flex items-center justify-center font-display text-2xl font-bold text-white">
+                  {profile.display_name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+              )}
               {profile.is_online && (
                 <div className="absolute bottom-2 right-2 w-5 h-5 bg-green-500 rounded-full border-3 border-vc-dark-800" />
               )}
@@ -80,9 +148,16 @@ export default function ProfilePage({
                   <motion.button
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
-                    className="px-4 py-2 bg-gradient-to-r from-vc-red-500 to-vc-red-600 rounded-xl text-sm font-medium text-white flex items-center gap-2 hover:shadow-lg hover:shadow-vc-red-500/20"
+                    onClick={handleFollowToggle}
+                    disabled={toggleFollowMutation.isPending}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2",
+                      profile.is_following
+                        ? "bg-vc-dark-600 border border-white/10 text-gray-300 hover:bg-vc-dark-500"
+                        : "bg-gradient-to-r from-vc-red-500 to-vc-red-600 text-white hover:shadow-lg hover:shadow-vc-red-500/20"
+                    )}
                   >
-                    <UserPlus size={14} /> Follow
+                    <UserPlus size={14} /> {profile.is_following ? 'Following' : 'Follow'}
                   </motion.button>
                   <motion.button
                     whileHover={{ scale: 1.03 }}
@@ -186,8 +261,10 @@ export default function ProfilePage({
           animate={{ opacity: 1 }}
           className="space-y-4"
         >
-          {userPosts.length > 0 ? (
-            userPosts.map((post) => <PostCard key={post.id} post={post} />)
+          {isPostsLoading ? (
+            <FeedSkeleton />
+          ) : userPosts.length > 0 ? (
+            userPosts.map((post: any) => <PostCard key={post.id} post={post} />)
           ) : (
             <div className="text-center py-12 text-gray-500">No posts yet</div>
           )}

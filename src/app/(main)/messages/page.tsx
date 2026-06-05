@@ -12,22 +12,25 @@ import {
   Smile,
   ArrowLeft,
 } from 'lucide-react';
-import { mockConversations, mockMessages, mockCurrentProfile } from '@/data/mockData';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import type { Conversation, Message } from '@/types';
+import { useConversations, useMessages, useSendMessage } from '@/hooks/useMessages';
+import { useAuthStore } from '@/stores/authStore';
 
 function ConversationItem({
   conversation,
   isActive,
   onClick,
+  currentUserId,
 }: {
   conversation: Conversation;
   isActive: boolean;
   onClick: () => void;
+  currentUserId: string;
 }) {
   const otherMember = conversation.members?.find(
-    (m) => m.id !== mockCurrentProfile.id
+    (m) => m.id !== currentUserId
   );
   const displayName =
     conversation.type === 'group'
@@ -55,11 +58,11 @@ function ConversationItem({
           <img
             src={avatarUrl}
             alt={displayName || ''}
-            className="w-11 h-11 rounded-full bg-vc-dark-600"
+            className="w-11 h-11 rounded-full bg-vc-dark-600 object-cover"
           />
         ) : (
-          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-vc-purple-500 to-vc-cyan-500 flex items-center justify-center text-xs font-bold">
-            {(conversation.name || '?').charAt(0)}
+          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-vc-purple-500 to-vc-cyan-500 flex items-center justify-center text-xs font-bold text-white">
+            {(displayName || '?').charAt(0).toUpperCase()}
           </div>
         )}
         {conversation.type === 'direct' && isOnline && (
@@ -106,11 +109,17 @@ function ChatBubble({
       className={cn('flex gap-2 mb-3', isOwn ? 'justify-end' : 'justify-start')}
     >
       {!isOwn && (
-        <img
-          src={message.sender?.avatar_url || ''}
-          alt={message.sender?.display_name}
-          className="w-7 h-7 rounded-full bg-vc-dark-600 shrink-0 mt-1"
-        />
+        message.sender?.avatar_url ? (
+          <img
+            src={message.sender.avatar_url}
+            alt={message.sender.display_name}
+            className="w-7 h-7 rounded-full bg-vc-dark-600 shrink-0 mt-1 object-cover"
+          />
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-vc-dark-600 shrink-0 mt-1 flex items-center justify-center text-[8px] font-bold text-white">
+            {message.sender?.display_name?.charAt(0) || 'U'}
+          </div>
+        )
       )}
       <div
         className={cn(
@@ -125,7 +134,7 @@ function ChatBubble({
             {message.sender.display_name}
           </p>
         )}
-        <p className="leading-relaxed">{message.content}</p>
+        <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
         <p
           className={cn(
             'text-[10px] mt-1',
@@ -165,40 +174,62 @@ function TypingIndicator() {
 }
 
 export default function MessagesPage() {
-  const [activeConvId, setActiveConvId] = useState<string | null>('conv-1');
+  const { profile: currentUser } = useAuthStore();
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showMobileChat, setShowMobileChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const activeConversation = mockConversations.find(
+  const { data: conversations = [], isLoading: isConvsLoading } = useConversations();
+  const { data: conversationMessages = [], isLoading: isMessagesLoading } = useMessages(activeConvId);
+  const sendMessageMutation = useSendMessage();
+
+  const activeConversation = conversations.find(
     (c) => c.id === activeConvId
   );
-  const conversationMessages = mockMessages.filter(
-    (m) => m.conversation_id === activeConvId
-  );
 
-  const filteredConversations = mockConversations.filter((c) => {
-    if (!searchQuery) return true;
+  const filteredConversations = conversations.filter((c) => {
+    if (!searchQuery || !currentUser) return true;
     const name =
       c.type === 'group'
         ? c.name
-        : c.members?.find((m) => m.id !== mockCurrentProfile.id)?.display_name;
+        : c.members?.find((m) => m.id !== currentUser.id)?.display_name;
     return name?.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   useEffect(() => {
+    if (conversations.length > 0 && !activeConvId) {
+      setActiveConvId(conversations[0].id);
+    }
+  }, [conversations, activeConvId]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeConvId]);
+  }, [conversationMessages]);
 
   const handleSelectConversation = (id: string) => {
     setActiveConvId(id);
     setShowMobileChat(true);
   };
 
+  const handleSend = () => {
+    if (!messageInput.trim() || !activeConvId) return;
+    sendMessageMutation.mutate({ conversationId: activeConvId, content: messageInput });
+    setMessageInput('');
+  };
+
   const otherMember = activeConversation?.members?.find(
-    (m) => m.id !== mockCurrentProfile.id
+    (m) => m.id !== currentUser?.id
   );
+
+  if (!currentUser) {
+    return (
+      <div className="flex-1 flex items-center justify-center py-12">
+        <p className="text-gray-500">Please sign in to view messages.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto w-full h-[calc(100vh-5rem)]">
@@ -229,12 +260,19 @@ export default function MessagesPage() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {filteredConversations.map((conv) => (
+            {isConvsLoading ? (
+              <div className="p-4 space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-14 bg-vc-dark-700/50 rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : filteredConversations.map((conv) => (
               <ConversationItem
                 key={conv.id}
                 conversation={conv}
                 isActive={conv.id === activeConvId}
                 onClick={() => handleSelectConversation(conv.id)}
+                currentUserId={currentUser.id}
               />
             ))}
           </div>
@@ -262,11 +300,11 @@ export default function MessagesPage() {
                     <img
                       src={otherMember.avatar_url}
                       alt=""
-                      className="w-9 h-9 rounded-full bg-vc-dark-600"
+                      className="w-9 h-9 rounded-full bg-vc-dark-600 object-cover"
                     />
                   ) : (
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-vc-purple-500 to-vc-cyan-500 flex items-center justify-center text-xs font-bold">
-                      {(activeConversation.name || '?').charAt(0)}
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-vc-purple-500 to-vc-cyan-500 flex items-center justify-center text-xs font-bold text-white">
+                      {(activeConversation.type === 'group' ? activeConversation.name || 'G' : otherMember?.display_name || '?').charAt(0).toUpperCase()}
                     </div>
                   )}
                   {otherMember?.is_online && (
@@ -302,14 +340,19 @@ export default function MessagesPage() {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4">
-                {conversationMessages.map((msg) => (
-                  <ChatBubble
-                    key={msg.id}
-                    message={msg}
-                    isOwn={msg.sender_id === mockCurrentProfile.id}
-                  />
-                ))}
-                <TypingIndicator />
+                {isMessagesLoading ? (
+                  <div className="flex justify-center items-center h-full">
+                    <div className="w-6 h-6 border-2 border-vc-cyan-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  conversationMessages.map((msg) => (
+                    <ChatBubble
+                      key={msg.id}
+                      message={msg}
+                      isOwn={msg.sender_id === currentUser.id}
+                    />
+                  ))
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
@@ -326,8 +369,8 @@ export default function MessagesPage() {
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && messageInput.trim()) {
-                          setMessageInput('');
+                        if (e.key === 'Enter') {
+                          handleSend();
                         }
                       }}
                       className="w-full px-4 py-2.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-vc-cyan-500/30"
@@ -339,6 +382,8 @@ export default function MessagesPage() {
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    onClick={handleSend}
+                    disabled={sendMessageMutation.isPending}
                     className="p-2.5 bg-gradient-to-r from-vc-red-500 to-vc-red-600 rounded-xl text-white hover:shadow-lg hover:shadow-vc-red-500/20 transition-shadow"
                   >
                     <Send size={16} />

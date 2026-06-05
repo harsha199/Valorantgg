@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Heart,
@@ -13,13 +12,13 @@ import {
   Video,
   Trophy,
   Bell,
-  Check,
   CheckCheck,
 } from 'lucide-react';
-import { mockNotifications } from '@/data/mockData';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
-import type { NotificationType } from '@/types';
+import type { NotificationType, Notification } from '@/types';
+import { useNotifications, useMarkAllRead, useMarkAsRead } from '@/hooks/useNotifications';
+import { useAuthStore } from '@/stores/authStore';
 
 const notifIcons: Record<NotificationType, { icon: typeof Heart; color: string }> = {
   like: { icon: Heart, color: 'text-vc-red-400 bg-vc-red-500/10' },
@@ -44,13 +43,21 @@ const item = {
 };
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const { profile: currentUser } = useAuthStore();
+  const { data: notifications = [], isLoading } = useNotifications();
+  const markAllReadMutation = useMarkAllRead();
+  const markAsReadMutation = useMarkAsRead();
+
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  const markAllAsRead = () => {
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, is_read: true }))
-    );
+  const handleMarkAllRead = () => {
+    markAllReadMutation.mutate();
+  };
+
+  const handleMarkRead = (id: string, isRead: boolean) => {
+    if (!isRead) {
+      markAsReadMutation.mutate(id);
+    }
   };
 
   const today = notifications.filter((n) => {
@@ -65,14 +72,15 @@ export default function NotificationsPage() {
     return date.toDateString() !== now.toDateString();
   });
 
-  const renderNotification = (notif: (typeof notifications)[0]) => {
-    const config = notifIcons[notif.type];
+  const renderNotification = (notif: Notification) => {
+    const config = notifIcons[notif.type] || { icon: Bell, color: 'text-gray-400 bg-gray-500/10' };
     const Icon = config.icon;
 
     return (
       <motion.div
         key={notif.id}
         variants={item}
+        onClick={() => handleMarkRead(notif.id, notif.is_read)}
         className={cn(
           'flex items-start gap-3 p-4 rounded-xl transition-all cursor-pointer',
           notif.is_read
@@ -82,20 +90,20 @@ export default function NotificationsPage() {
       >
         {/* Actor Avatar */}
         <div className="relative shrink-0">
-          {notif.actor ? (
+          {notif.actor?.avatar_url ? (
             <img
-              src={notif.actor.avatar_url || ''}
+              src={notif.actor.avatar_url}
               alt={notif.actor.display_name}
-              className="w-10 h-10 rounded-full bg-vc-dark-600"
+              className="w-10 h-10 rounded-full bg-vc-dark-600 object-cover"
             />
           ) : (
             <div
               className={cn(
-                'w-10 h-10 rounded-full flex items-center justify-center',
+                'w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white',
                 config.color
               )}
             >
-              <Icon size={18} />
+              {notif.actor?.display_name?.charAt(0) || <Icon size={18} />}
             </div>
           )}
           {/* Type Icon Badge */}
@@ -115,7 +123,7 @@ export default function NotificationsPage() {
         <div className="flex-1 min-w-0">
           <p className="text-sm text-gray-300">
             <span className="font-medium text-gray-100">
-              {notif.actor?.display_name}
+              {notif.actor?.display_name || 'System'}
             </span>{' '}
             {notif.message.replace(notif.actor?.display_name || '', '').trim()}
           </p>
@@ -133,6 +141,14 @@ export default function NotificationsPage() {
       </motion.div>
     );
   };
+
+  if (!currentUser) {
+    return (
+      <div className="flex-1 flex items-center justify-center py-12">
+        <p className="text-gray-500">Please sign in to view notifications.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto w-full">
@@ -155,7 +171,8 @@ export default function NotificationsPage() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={markAllAsRead}
+            onClick={handleMarkAllRead}
+            disabled={markAllReadMutation.isPending}
             className="px-3 py-1.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-xs font-medium text-gray-400 hover:text-vc-cyan-400 transition-colors flex items-center gap-1.5"
           >
             <CheckCheck size={14} />
@@ -164,48 +181,58 @@ export default function NotificationsPage() {
         )}
       </motion.div>
 
-      {/* Today */}
-      {today.length > 0 && (
-        <div className="mb-6">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">
-            Today
-          </p>
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            className="glass rounded-2xl border border-white/5 divide-y divide-white/5 overflow-hidden"
-          >
-            {today.map(renderNotification)}
-          </motion.div>
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 bg-vc-dark-700/50 rounded-xl animate-pulse" />
+          ))}
         </div>
-      )}
+      ) : (
+        <>
+          {/* Today */}
+          {today.length > 0 && (
+            <div className="mb-6">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">
+                Today
+              </p>
+              <motion.div
+                variants={container}
+                initial="hidden"
+                animate="show"
+                className="glass rounded-2xl border border-white/5 divide-y divide-white/5 overflow-hidden"
+              >
+                {today.map(renderNotification)}
+              </motion.div>
+            </div>
+          )}
 
-      {/* Earlier */}
-      {earlier.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">
-            Earlier
-          </p>
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            className="glass rounded-2xl border border-white/5 divide-y divide-white/5 overflow-hidden"
-          >
-            {earlier.map(renderNotification)}
-          </motion.div>
-        </div>
-      )}
+          {/* Earlier */}
+          {earlier.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">
+                Earlier
+              </p>
+              <motion.div
+                variants={container}
+                initial="hidden"
+                animate="show"
+                className="glass rounded-2xl border border-white/5 divide-y divide-white/5 overflow-hidden"
+              >
+                {earlier.map(renderNotification)}
+              </motion.div>
+            </div>
+          )}
 
-      {notifications.length === 0 && (
-        <div className="text-center py-16">
-          <Bell size={48} className="mx-auto text-gray-600 mb-4" />
-          <p className="text-gray-400 font-medium">No notifications yet</p>
-          <p className="text-sm text-gray-500 mt-1">
-            When someone interacts with you, you&apos;ll see it here
-          </p>
-        </div>
+          {notifications.length === 0 && (
+            <div className="text-center py-16">
+              <Bell size={48} className="mx-auto text-gray-600 mb-4" />
+              <p className="text-gray-400 font-medium">No notifications yet</p>
+              <p className="text-sm text-gray-500 mt-1">
+                When someone interacts with you, you&apos;ll see it here
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

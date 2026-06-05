@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import type { LFGListing, PlayStyle, Region } from '@/types';
 
+import { useLFGListings, useJoinLFG, useCreateLFG } from '@/hooks/useLFG';
+
 const playStyleColors: Record<PlayStyle, string> = {
   competitive: 'bg-vc-red-500/20 text-vc-red-400',
   casual: 'bg-green-500/20 text-green-400',
@@ -34,6 +36,11 @@ const statusColors: Record<string, string> = {
 
 function LFGCard({ listing }: { listing: LFGListing }) {
   const progress = (listing.slots_filled / listing.slots_total) * 100;
+  const joinMutation = useJoinLFG();
+
+  const handleJoin = () => {
+    joinMutation.mutate(listing.id);
+  };
 
   return (
     <motion.div
@@ -116,11 +123,17 @@ function LFGCard({ listing }: { listing: LFGListing }) {
       {/* Creator & Join */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img
-            src={listing.creator?.avatar_url || ''}
-            alt={listing.creator?.display_name}
-            className="w-6 h-6 rounded-full bg-vc-dark-600"
-          />
+          {listing.creator?.avatar_url ? (
+            <img
+              src={listing.creator.avatar_url}
+              alt={listing.creator.display_name}
+              className="w-6 h-6 rounded-full bg-vc-dark-600 object-cover"
+            />
+          ) : (
+            <div className="w-6 h-6 rounded-full bg-vc-dark-600 flex items-center justify-center text-[8px] font-bold">
+              {listing.creator?.display_name?.charAt(0) || 'U'}
+            </div>
+          )}
           <span className="text-xs text-gray-500">
             {listing.creator?.display_name}
           </span>
@@ -128,7 +141,8 @@ function LFGCard({ listing }: { listing: LFGListing }) {
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          disabled={listing.status !== 'open'}
+          disabled={listing.status !== 'open' || joinMutation.isPending}
+          onClick={handleJoin}
           className={cn(
             'px-4 py-1.5 text-xs font-medium rounded-lg transition-all',
             listing.status === 'open'
@@ -136,7 +150,7 @@ function LFGCard({ listing }: { listing: LFGListing }) {
               : 'bg-vc-dark-600 text-gray-500 cursor-not-allowed'
           )}
         >
-          {listing.slots_filled >= listing.slots_total ? 'Full' : 'Join'}
+          {joinMutation.isPending ? 'Joining...' : listing.slots_filled >= listing.slots_total ? 'Full' : 'Join'}
         </motion.button>
       </div>
     </motion.div>
@@ -150,17 +164,23 @@ export default function LFGPage() {
   const [selectedStyle, setSelectedStyle] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  const filters = useMemo(() => {
+    const f: any = {};
+    if (selectedGame !== 'all') f.game_id = selectedGame;
+    if (selectedRegion !== 'all') f.region = selectedRegion;
+    if (selectedStyle !== 'all') f.play_style = selectedStyle;
+    return f;
+  }, [selectedGame, selectedRegion, selectedStyle]);
+
+  const { data: listings = [], isLoading } = useLFGListings(filters);
+
   const filteredListings = useMemo(() => {
-    return mockLFGListings.filter((listing) => {
+    return listings.filter((listing) => {
       if (search && !listing.title.toLowerCase().includes(search.toLowerCase()))
-        return false;
-      if (selectedGame !== 'all' && listing.game_id !== selectedGame) return false;
-      if (selectedRegion !== 'all' && listing.region !== selectedRegion) return false;
-      if (selectedStyle !== 'all' && listing.play_style !== selectedStyle)
         return false;
       return true;
     });
-  }, [search, selectedGame, selectedRegion, selectedStyle]);
+  }, [listings, search]);
 
   const regions: Region[] = ['NA', 'EU', 'APAC', 'KR', 'BR', 'LATAM', 'OCE'];
   const styles: PlayStyle[] = ['competitive', 'casual', 'practice', 'tournament'];
@@ -245,33 +265,41 @@ export default function LFGPage() {
       </motion.div>
 
       {/* Listings Grid */}
-      <motion.div
-        initial="hidden"
-        animate="show"
-        variants={{
-          hidden: { opacity: 0 },
-          show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-        }}
-        className="grid grid-cols-1 md:grid-cols-2 gap-4"
-      >
-        <AnimatePresence mode="popLayout">
-          {filteredListings.map((listing) => (
-            <motion.div
-              key={listing.id}
-              layout
-              variants={{
-                hidden: { opacity: 0, y: 20 },
-                show: { opacity: 1, y: 0 },
-              }}
-              exit={{ opacity: 0, scale: 0.95 }}
-            >
-              <LFGCard listing={listing} />
-            </motion.div>
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="glass rounded-2xl border border-white/5 h-48 animate-pulse bg-vc-dark-700/30" />
           ))}
-        </AnimatePresence>
-      </motion.div>
+        </div>
+      ) : (
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={{
+            hidden: { opacity: 0 },
+            show: { opacity: 1, transition: { staggerChildren: 0.06 } },
+          }}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
+          <AnimatePresence mode="popLayout">
+            {filteredListings.map((listing) => (
+              <motion.div
+                key={listing.id}
+                layout
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  show: { opacity: 1, y: 0 },
+                }}
+                exit={{ opacity: 0, scale: 0.95 }}
+              >
+                <LFGCard listing={listing} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
 
-      {filteredListings.length === 0 && (
+      {!isLoading && filteredListings.length === 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
