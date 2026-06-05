@@ -7,8 +7,10 @@ import { PostCard } from '@/components/feed/PostCard';
 import { CreatePostModal } from '@/components/feed/CreatePostModal';
 import { TrendingTags } from '@/components/feed/TrendingTags';
 import { FeedSkeleton } from '@/components/feed/FeedSkeleton';
-import { mockPosts, mockProfiles, mockCurrentProfile } from '@/data/mockData';
+import { mockProfiles } from '@/data/mockData';
 import { cn } from '@/lib/utils';
+import { useFeed } from '@/hooks/usePosts';
+import { useAuthStore } from '@/stores/authStore';
 
 const suggestedUsers = mockProfiles.filter((p) => p.id !== 'user-1').slice(0, 4);
 
@@ -27,7 +29,11 @@ const item = {
 
 export default function HomePage() {
   const [showCreatePost, setShowCreatePost] = useState(false);
-  const [isLoading] = useState(false);
+  const { profile } = useAuthStore();
+  
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useFeed();
+  
+  const posts = data?.pages.flatMap((page) => page.data) || [];
 
   return (
     <div className="flex gap-6 max-w-7xl mx-auto w-full">
@@ -41,13 +47,13 @@ export default function HomePage() {
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-vc-red-500 to-vc-purple-500 flex items-center justify-center text-sm font-bold shrink-0">
-              {mockCurrentProfile.display_name.charAt(0)}
+              {profile?.display_name?.charAt(0) || 'U'}
             </div>
             <button
               onClick={() => setShowCreatePost(true)}
               className="flex-1 text-left px-4 py-2.5 rounded-xl bg-vc-dark-600/50 text-gray-400 hover:bg-vc-dark-600 hover:text-gray-300 transition-colors cursor-text"
             >
-              What&apos;s on your mind, {mockCurrentProfile.display_name.split(' ')[0]}?
+              What&apos;s on your mind, {profile?.display_name?.split(' ')[0] || 'Gamer'}?
             </button>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -71,11 +77,29 @@ export default function HomePage() {
             animate="show"
             className="space-y-4"
           >
-            {mockPosts.map((post) => (
+            {posts.map((post) => (
               <motion.div key={post.id} variants={item}>
-                <PostCard post={post} />
+                <PostCard post={post as any} />
               </motion.div>
             ))}
+            
+            {posts.length === 0 && !isLoading && (
+              <div className="text-center py-10 text-gray-500">
+                No posts yet. Be the first to share!
+              </div>
+            )}
+            
+            {hasNextPage && (
+              <div className="pt-4 flex justify-center">
+                <button
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="px-4 py-2 text-sm text-vc-red-400 hover:text-vc-red-300 transition-colors"
+                >
+                  {isFetchingNextPage ? 'Loading more...' : 'Load more'}
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </div>

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Orbitron } from 'next/font/google';
 import { QueryProvider } from '@/providers/QueryProvider';
+import { AuthProvider } from '@/providers/AuthProvider';
 import './globals.css';
 
 const inter = Inter({
@@ -34,7 +35,11 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full bg-vc-dark-900 font-body text-gray-200">
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

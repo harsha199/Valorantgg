@@ -6,10 +6,14 @@ import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, UserPlus, User, AtSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+import { signUp } from '@/lib/actions/auth';
+import { useRouter } from 'next/navigation';
+
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     displayName: '',
@@ -22,10 +26,29 @@ export default function SignupPage() {
   const updateField = (field: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 1500);
+    setError(null);
+    
+    if (form.password !== form.confirmPassword) {
+      setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('email', form.email);
+    formData.append('password', form.password);
+    formData.append('username', form.username);
+    formData.append('displayName', form.displayName);
+    
+    const result = await signUp(formData);
+    
+    if (result?.error) {
+      setError(result.error);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -58,6 +81,11 @@ export default function SignupPage() {
           </div>
 
           {/* Form */}
+          {error && (
+            <div className="mb-4 rounded-xl bg-vc-red-500/10 p-3 text-sm text-vc-red-500 border border-vc-red-500/20">
+              {error}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-3.5">
             {/* Display Name */}
             <div>

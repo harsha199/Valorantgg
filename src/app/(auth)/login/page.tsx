@@ -6,17 +6,31 @@ import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, Gamepad2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+import { signIn } from '@/lib/actions/auth';
+import { useRouter } from 'next/navigation';
+
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Mock login — would integrate with Supabase
-    setTimeout(() => setIsLoading(false), 1500);
+    setError(null);
+    
+    const formData = new FormData();
+    formData.append('email', email);
+    formData.append('password', password);
+    
+    const result = await signIn(formData);
+    
+    if (result?.error) {
+      setError(result.error);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -49,6 +63,11 @@ export default function LoginPage() {
           </div>
 
           {/* Form */}
+          {error && (
+            <div className="mb-4 rounded-xl bg-vc-red-500/10 p-3 text-sm text-vc-red-500 border border-vc-red-500/20">
+              {error}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
             <div>

@@ -1,11 +1,46 @@
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient as createClient, type CookieOptions } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
-// Server-side Supabase client for use in RSC and API routes
-export function createServerClient() {
+export async function createServerClient() {
+  const cookieStore = await cookies();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch (error) {
+          // The `set` method was called from a Server Component.
+          // This can be ignored if you have middleware refreshing
+          // user sessions.
+        }
+      },
+      remove(name: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value: '', ...options });
+        } catch (error) {
+          // The `delete` method was called from a Server Component.
+          // This can be ignored if you have middleware refreshing
+          // user sessions.
+        }
+      },
+    },
+  });
+}
+
+// Service role client for bypass RLS and background jobs
+export function createAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-  return createClient(supabaseUrl, supabaseServiceKey, {
+  // we use @supabase/supabase-js for service role because we don't need cookies
+  const { createClient: createBaseClient } = require('@supabase/supabase-js');
+  return createBaseClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
