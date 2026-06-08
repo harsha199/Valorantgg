@@ -22,7 +22,7 @@ import { signOut } from '@/lib/actions/auth';
 
 export default function Navbar() {
   const { mobileMenuOpen, setMobileMenuOpen, toggleSidebar } = useUIStore();
-  const { profile: currentUser, logout } = useAuthStore();
+  const { user, profile: currentUser, logout, isLoading } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -30,14 +30,13 @@ export default function Navbar() {
   const { data: notifications = [] } = useNotifications();
   const unreadNotificationCount = notifications.filter((n) => !n.is_read).length;
 
-  const initials = currentUser?.display_name
-    ? currentUser.display_name
-        .split(' ')
-        .map((w) => w[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()
-    : 'U';
+  const displayName = currentUser?.display_name || user?.email?.split('@')[0] || 'User';
+  const initials = displayName
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   const handleSignOut = async () => {
     await signOut();
@@ -139,7 +138,9 @@ export default function Navbar() {
           <div className="mx-2 hidden h-6 w-px bg-white/10 sm:block" />
 
           {/* User Avatar Dropdown */}
-          {currentUser ? (
+          {isLoading ? (
+            <div className="h-9 w-9 animate-pulse rounded-full bg-white/10" />
+          ) : user ? (
             <div className="relative" ref={userMenuRef}>
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -148,10 +149,10 @@ export default function Navbar() {
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-vc-dark-700"
               >
                 {/* Avatar */}
-                {currentUser.avatar_url ? (
+                {currentUser?.avatar_url ? (
                   <img
                     src={currentUser.avatar_url}
-                    alt={currentUser.display_name}
+                    alt={displayName}
                     className="h-8 w-8 rounded-full object-cover"
                   />
                 ) : (
@@ -161,10 +162,10 @@ export default function Navbar() {
                 )}
                 <div className="hidden flex-col items-start sm:flex">
                   <span className="text-sm font-medium text-gray-200">
-                    {currentUser.display_name}
+                    {displayName}
                   </span>
                   <span className="text-[11px] text-vc-cyan-500">
-                    {currentUser.rank || 'Bronze I'}
+                    {currentUser?.rank || 'Unranked'}
                   </span>
                 </div>
                 <ChevronDown
@@ -188,15 +189,15 @@ export default function Navbar() {
                   >
                     <div className="border-b border-white/5 p-3">
                       <p className="text-sm font-medium text-white">
-                        {currentUser.display_name}
+                        {displayName}
                       </p>
                       <p className="text-xs text-gray-500">
-                        @{currentUser.username}
+                        {currentUser?.username ? `@${currentUser.username}` : user.email}
                       </p>
                     </div>
                     <div className="p-1">
                       <DropdownItem
-                        href={`/profile/${currentUser.username}`}
+                        href={currentUser?.username ? `/profile/${currentUser.username}` : '/settings'}
                         icon={<User size={16} />}
                         label="Profile"
                         onClick={() => setUserMenuOpen(false)}
