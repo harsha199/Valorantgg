@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useUpdateProfile } from '@/hooks/useProfile';
+import { syncRiotStats } from '@/lib/actions/riot';
 
 const settingsSections = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -104,8 +105,10 @@ export default function SettingsPage() {
   const [connectedAccounts, setConnectedAccounts] = useState({
     discord: true,
     steam: false,
-    riot: true,
   });
+  const [riotIdInput, setRiotIdInput] = useState('');
+  const [isSyncingRiot, setIsSyncingRiot] = useState(false);
+  const [showRiotForm, setShowRiotForm] = useState(false);
 
   const handleUploadImage = async (file: File, bucket: 'avatars' | 'banners') => {
     if (!profile) throw new Error('Not logged in');
@@ -440,68 +443,207 @@ export default function SettingsPage() {
                   Connected Accounts
                 </h2>
                 <div className="space-y-3">
-                  {[
-                    {
-                      name: 'Discord',
-                      key: 'discord' as const,
-                      color: 'bg-indigo-500',
-                      desc: 'Login + server import',
-                    },
-                    {
-                      name: 'Riot Games',
-                      key: 'riot' as const,
-                      color: 'bg-vc-red-500',
-                      desc: 'Valorant stats + rank',
-                    },
-                    {
-                      name: 'Steam',
-                      key: 'steam' as const,
-                      color: 'bg-gray-600',
-                      desc: 'Game library + achievements',
-                    },
-                  ].map((account) => (
-                    <div
-                      key={account.key}
-                      className="flex items-center justify-between p-4 bg-vc-dark-600/30 rounded-xl border border-white/5"
+                  {/* Discord Account */}
+                  <div className="flex items-center justify-between p-4 bg-vc-dark-600/30 rounded-xl border border-white/5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-500">
+                        <Link2 size={16} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-200">
+                          Discord
+                        </p>
+                        <p className="text-xs text-gray-500">Login + server import</p>
+                      </div>
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      className={cn(
+                        'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                        connectedAccounts.discord
+                          ? 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
+                          : 'bg-vc-dark-500 text-gray-400 hover:bg-vc-cyan-500/10 hover:text-vc-cyan-400'
+                      )}
+                      onClick={() =>
+                        setConnectedAccounts((prev) => ({
+                          ...prev,
+                          discord: !prev.discord,
+                        }))
+                      }
                     >
+                      {connectedAccounts.discord ? 'Connected' : 'Connect'}
+                    </motion.button>
+                  </div>
+
+                  {/* Riot Games Account */}
+                  <div className="bg-vc-dark-600/30 rounded-xl border border-white/5 overflow-hidden transition-all duration-300">
+                    <div className="flex items-center justify-between p-4">
                       <div className="flex items-center gap-3">
-                        <div
-                          className={cn(
-                            'w-10 h-10 rounded-xl flex items-center justify-center',
-                            account.color
-                          )}
-                        >
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-vc-red-500">
                           <Link2 size={16} className="text-white" />
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-200">
-                            {account.name}
+                            Riot Games
                           </p>
-                          <p className="text-xs text-gray-500">{account.desc}</p>
+                          <p className="text-xs text-gray-500">
+                            {profile.riot_stats?.riot_id ? `Connected as ${profile.riot_stats.riot_id}` : 'Valorant stats + rank'}
+                          </p>
                         </div>
                       </div>
-                      <motion.button
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        className={cn(
-                          'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                          connectedAccounts[account.key]
-                            ? 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
-                            : 'bg-vc-dark-500 text-gray-400 hover:bg-vc-cyan-500/10 hover:text-vc-cyan-400'
+                      <div className="flex items-center gap-2">
+                        {profile.riot_stats && (
+                          <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            disabled={isSyncingRiot}
+                            onClick={async () => {
+                              setIsSyncingRiot(true);
+                              try {
+                                const updated = await syncRiotStats(profile.riot_stats!.riot_id);
+                                setProfile(updated);
+                                alert('Stats synced successfully!');
+                              } catch (err: any) {
+                                alert(`Failed to sync stats: ${err.message}`);
+                              } finally {
+                                setIsSyncingRiot(false);
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-vc-cyan-500/10 text-vc-cyan-400 hover:bg-vc-cyan-500/20 transition-colors"
+                          >
+                            {isSyncingRiot ? 'Syncing...' : 'Sync Stats'}
+                          </motion.button>
                         )}
-                        onClick={() =>
-                          setConnectedAccounts((prev) => ({
-                            ...prev,
-                            [account.key]: !prev[account.key],
-                          }))
-                        }
-                      >
-                        {connectedAccounts[account.key]
-                          ? 'Connected'
-                          : 'Connect'}
-                      </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          className={cn(
+                            'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                            profile.riot_stats
+                              ? 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
+                              : 'bg-vc-dark-500 text-gray-400 hover:bg-vc-cyan-500/10 hover:text-vc-cyan-400'
+                          )}
+                          onClick={() => {
+                            if (profile.riot_stats) {
+                              if (confirm('Are you sure you want to disconnect your Riot Games account?')) {
+                                updateProfileMutation.mutate({
+                                  riot_stats: null,
+                                  rank: null
+                                }, {
+                                  onSuccess: (updated) => {
+                                    setProfile(updated);
+                                    setRiotIdInput('');
+                                    alert('Riot account disconnected.');
+                                  }
+                                });
+                              }
+                            } else {
+                              setShowRiotForm(!showRiotForm);
+                            }
+                          }}
+                        >
+                          {profile.riot_stats ? 'Connected' : showRiotForm ? 'Cancel' : 'Connect'}
+                        </motion.button>
+                      </div>
                     </div>
-                  ))}
+
+                    {profile.riot_stats && (
+                      <div className="px-4 pb-4 pt-1 border-t border-white/5 bg-vc-dark-800/20 text-xs text-gray-400 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                          <span className="text-[10px] uppercase text-gray-500 block">Rank</span>
+                          <span className="font-semibold text-gray-200">{profile.rank || 'Unranked'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase text-gray-500 block">KD Ratio</span>
+                          <span className="font-semibold text-gray-200">{profile.riot_stats.kd_ratio}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase text-gray-500 block">Win Rate</span>
+                          <span className="font-semibold text-gray-200">{profile.riot_stats.win_rate}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase text-gray-500 block">Matches Played</span>
+                          <span className="font-semibold text-gray-200">{profile.riot_stats.matches_played} ({profile.riot_stats.hours_played}h)</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {!profile.riot_stats && showRiotForm && (
+                      <div className="p-4 border-t border-white/5 bg-vc-dark-800/20 space-y-3">
+                        <p className="text-xs text-gray-400">
+                          Connecting your Riot ID will fetch your competitive rank, KD ratio, and win rate to display on your profile.
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Name#Tag (e.g. TenZ#NA1)"
+                            value={riotIdInput}
+                            onChange={(e) => setRiotIdInput(e.target.value)}
+                            className="flex-1 px-3 py-2 bg-vc-dark-600/50 border border-white/5 rounded-lg text-xs text-gray-200 focus:outline-none focus:border-vc-cyan-500/30"
+                          />
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            disabled={isSyncingRiot || !riotIdInput.includes('#')}
+                            onClick={async () => {
+                              if (!riotIdInput.trim() || !riotIdInput.includes('#')) {
+                                alert('Please enter a valid Riot ID in the format Name#Tag');
+                                return;
+                              }
+                              setIsSyncingRiot(true);
+                              try {
+                                const updated = await syncRiotStats(riotIdInput.trim());
+                                setProfile(updated);
+                                setShowRiotForm(false);
+                                alert('Riot account connected successfully!');
+                              } catch (err: any) {
+                                alert(`Failed to connect Riot account: ${err.message}`);
+                              } finally {
+                                setIsSyncingRiot(false);
+                              }
+                            }}
+                            className="px-4 py-2 bg-vc-red-500 hover:bg-vc-red-600 disabled:bg-vc-dark-500 disabled:text-gray-500 text-white text-xs font-semibold rounded-lg transition-colors"
+                          >
+                            {isSyncingRiot ? 'Connecting...' : 'Link & Sync'}
+                          </motion.button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Steam Account */}
+                  <div className="flex items-center justify-between p-4 bg-vc-dark-600/30 rounded-xl border border-white/5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gray-600">
+                        <Link2 size={16} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-200">
+                          Steam
+                        </p>
+                        <p className="text-xs text-gray-500">Game library + achievements</p>
+                      </div>
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      className={cn(
+                        'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                        connectedAccounts.steam
+                          ? 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
+                          : 'bg-vc-dark-500 text-gray-400 hover:bg-vc-cyan-500/10 hover:text-vc-cyan-400'
+                      )}
+                      onClick={() =>
+                        setConnectedAccounts((prev) => ({
+                          ...prev,
+                          steam: !prev.steam,
+                        }))
+                      }
+                    >
+                      {connectedAccounts.steam ? 'Connected' : 'Connect'}
+                    </motion.button>
+                  </div>
                 </div>
               </div>
             )}

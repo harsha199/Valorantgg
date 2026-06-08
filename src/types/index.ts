@@ -24,6 +24,14 @@ export interface Profile {
   is_online: boolean;
   last_seen: string | null;
   created_at: string;
+  riot_stats?: {
+    riot_id: string;
+    kd_ratio: number;
+    win_rate: string;
+    matches_played: number;
+    hours_played: number;
+    synced_at: string;
+  } | null;
   // Computed / joined
   followers_count?: number;
   following_count?: number;
