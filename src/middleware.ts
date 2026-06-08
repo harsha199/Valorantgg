@@ -55,19 +55,22 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup');
   const isProtectedRoute = request.nextUrl.pathname.startsWith('/settings') || request.nextUrl.pathname.startsWith('/messages') || request.nextUrl.pathname.startsWith('/notifications');
 
-  if (user && isAuthRoute) {
-    return NextResponse.redirect(new URL('/', request.url));
-  }
+  // Only verify the user on protected or auth routes to prevent slow navigation
+  if (isAuthRoute || isProtectedRoute) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user && isProtectedRoute) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    if (user && isAuthRoute) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+
+    if (!user && isProtectedRoute) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
   }
 
   return response;

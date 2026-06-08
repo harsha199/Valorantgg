@@ -32,6 +32,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             
           if (profile && mounted) {
             setProfile(profile as any);
+          } else if (!profile) {
+            // Fallback: If trigger failed, insert profile manually
+            const { data: newProfile } = await supabase
+              .from('profiles')
+              .insert({
+                id: session.user.id,
+                username: `user_${session.user.id.substring(0, 8)}`,
+                display_name: session.user.email?.split('@')[0] || 'New Player',
+              })
+              .select('*')
+              .single();
+            if (newProfile && mounted) {
+              setProfile(newProfile as any);
+            }
           }
         }
       } catch (err) {
@@ -52,7 +66,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .select('*')
             .eq('id', session.user.id)
             .single();
-          if (profile) setProfile(profile as any);
+          if (profile) {
+            setProfile(profile as any);
+          } else {
+            // Fallback
+            const { data: newProfile } = await supabase
+              .from('profiles')
+              .insert({
+                id: session.user.id,
+                username: `user_${session.user.id.substring(0, 8)}`,
+                display_name: session.user.email?.split('@')[0] || 'New Player',
+              })
+              .select('*')
+              .single();
+            if (newProfile) setProfile(newProfile as any);
+          }
         }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
