@@ -8,7 +8,7 @@ export async function getNotifications() {
   const supabase = await createServerClient();
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  if (!user) return [];
 
   const { data, error } = await supabase
     .from('notifications')
