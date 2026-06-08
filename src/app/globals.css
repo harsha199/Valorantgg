@@ -15,38 +15,63 @@
   --color-vc-purple-600: #8B3DD4;
 
   /* ── Dark Surfaces ── */
-  --color-vc-dark-900: #0A0A0F;
-  --color-vc-dark-800: #121218;
-  --color-vc-dark-700: #1A1A2E;
-  --color-vc-dark-600: #252540;
-  --color-vc-dark-500: #2F2F50;
+  --color-vc-dark-900: var(--surface-900);
+  --color-vc-dark-800: var(--surface-800);
+  --color-vc-dark-700: var(--surface-700);
+  --color-vc-dark-600: var(--surface-600);
+  --color-vc-dark-500: var(--surface-500);
 
   /* ── Fonts ── */
   --font-display: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
   --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ── Theme Definitions ── */
+:root {
+  --surface-900: #0A0A0F;
+  --surface-800: #121218;
+  --surface-700: #1A1A2E;
+  --surface-600: #252540;
+  --surface-500: #2F2F50;
+}
+
+[data-theme='midnight'] {
+  --surface-900: #07090E;
+  --surface-800: #0B0E14;
+  --surface-700: #10141D;
+  --surface-600: #151A27;
+  --surface-500: #1E2536;
+}
+
+[data-theme='amoled'] {
+  --surface-900: #000000;
+  --surface-800: #050505;
+  --surface-700: #0A0A0A;
+  --surface-600: #111111;
+  --surface-500: #1A1A1A;
+}
+
 /* ── Base ── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #252540 transparent;
+  scrollbar-color: var(--surface-600) transparent;
 }
 
 body {
-  background: #0A0A0F;
+  background: var(--surface-900);
   color: #e5e5e5;
   font-family: var(--font-body);
 }
 
 /* ── Glass Variants ── */
 .glass {
-  background: rgba(26, 26, 46, 0.5);
+  background: color-mix(in srgb, var(--surface-700) 50%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
 .glass-strong {
-  background: rgba(26, 26, 46, 0.8);
+  background: color-mix(in srgb, var(--surface-700) 80%, transparent);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
@@ -96,9 +121,9 @@ body {
 .animate-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(26, 26, 46, 0.5) 25%,
-    rgba(37, 37, 64, 0.8) 50%,
-    rgba(26, 26, 46, 0.5) 75%
+    color-mix(in srgb, var(--surface-700) 50%, transparent) 25%,
+    color-mix(in srgb, var(--surface-600) 80%, transparent) 50%,
+    color-mix(in srgb, var(--surface-700) 50%, transparent) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;

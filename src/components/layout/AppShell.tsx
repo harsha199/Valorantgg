@@ -1,12 +1,17 @@
 'use client';
 
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import { useUIStore } from '@/stores/uiStore';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { mobileMenuOpen, setMobileMenuOpen } = useUIStore();
+  const { mobileMenuOpen, setMobileMenuOpen, theme } = useUIStore();
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   return (
     <div className="relative flex min-h-screen flex-col bg-vc-dark-900">

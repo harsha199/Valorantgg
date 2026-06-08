@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Visibility } from '@/types';
+import { useCreatePost } from '@/hooks/usePosts';
 
 interface CreatePostModalProps {
   isOpen: boolean;
@@ -37,13 +38,22 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   const isOverLimit = charCount > MAX_CHARS;
   const canPost = content.trim().length > 0 && !isOverLimit;
 
+  const { mutate: createPost, isPending } = useCreatePost();
+
   const selectedVisibility = visibilityOptions.find((v) => v.value === visibility)!;
 
   const handlePost = () => {
-    if (!canPost) return;
-    setContent('');
-    setVisibility('public');
-    onClose();
+    if (!canPost || isPending) return;
+    createPost(
+      { content, visibility, post_type: 'text' },
+      {
+        onSuccess: () => {
+          setContent('');
+          setVisibility('public');
+          onClose();
+        },
+      }
+    );
   };
 
   return (
@@ -171,15 +181,15 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
             <div className="flex items-center justify-end border-t border-white/5 px-5 py-4">
               <button
                 onClick={handlePost}
-                disabled={!canPost}
+                disabled={!canPost || isPending}
                 className={cn(
                   'rounded-xl px-6 py-2.5 font-display text-xs font-bold uppercase tracking-wider text-white transition-all',
-                  canPost
+                  canPost && !isPending
                     ? 'bg-gradient-to-r from-vc-red-500 to-vc-purple-500 shadow-lg shadow-vc-red-500/25 hover:shadow-vc-red-500/40'
                     : 'cursor-not-allowed bg-vc-dark-600 text-gray-600'
                 )}
               >
-                Post
+                {isPending ? 'Posting...' : 'Post'}
               </button>
             </div>
           </motion.div>
