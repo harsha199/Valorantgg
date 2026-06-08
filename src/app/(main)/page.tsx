@@ -7,12 +7,75 @@ import { PostCard } from '@/components/feed/PostCard';
 import { CreatePostModal } from '@/components/feed/CreatePostModal';
 import { TrendingTags } from '@/components/feed/TrendingTags';
 import { FeedSkeleton } from '@/components/feed/FeedSkeleton';
-import { mockProfiles } from '@/data/mockData';
 import { cn } from '@/lib/utils';
 import { useFeed } from '@/hooks/usePosts';
 import { useAuthStore } from '@/stores/authStore';
+import { useQuery } from '@tanstack/react-query';
+import { useToggleFollow } from '@/hooks/useProfile';
 
-const suggestedUsers = mockProfiles.filter((p) => p.id !== 'user-1').slice(0, 4);
+function SuggestedUserItem({ user }: { user: any }) {
+  const { profile: currentUser } = useAuthStore();
+  const toggleFollowMutation = useToggleFollow();
+
+  const handleFollowToggle = () => {
+    if (!currentUser) {
+      alert('Please sign in to follow.');
+      return;
+    }
+    toggleFollowMutation.mutate({
+      targetUserId: user.id,
+      username: user.username,
+      isCurrentlyFollowing: !!user.is_following,
+    });
+  };
+
+  const initials = user.display_name
+    ?.split(' ')
+    .map((w: string) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'U';
+
+  return (
+    <div className="flex items-center gap-3">
+      {user.avatar_url ? (
+        <img
+          src={user.avatar_url}
+          alt={user.display_name}
+          className="w-9 h-9 rounded-full bg-vc-dark-600 object-cover"
+        />
+      ) : (
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-vc-red-500 to-vc-purple-500 flex items-center justify-center font-display text-[10px] font-bold text-white shrink-0">
+          {initials}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-200 truncate">
+          {user.display_name}
+        </p>
+        <p className="text-xs text-gray-500 truncate">
+          {user.main_game || 'Valorant'} · {user.rank || 'Bronze'}
+        </p>
+      </div>
+      {currentUser?.id !== user.id && (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleFollowToggle}
+          disabled={toggleFollowMutation.isPending}
+          className={cn(
+            "px-3 py-1 text-xs font-medium rounded-lg transition-colors border",
+            user.is_following
+              ? "bg-vc-dark-600 border-white/10 text-gray-400 hover:bg-vc-red-500/10 hover:text-vc-red-400 hover:border-vc-red-500/20"
+              : "bg-vc-dark-600 text-gray-400 border-white/5 hover:bg-vc-purple-500/10 hover:text-vc-purple-400 hover:border-vc-purple-500/20"
+          )}
+        >
+          {user.is_following ? 'Following' : 'Follow'}
+        </motion.button>
+      )}
+    </div>
+  );
+}
 
 const container = {
   hidden: { opacity: 0 },
@@ -29,11 +92,50 @@ const item = {
 
 export default function HomePage() {
   const [showCreatePost, setShowCreatePost] = useState(false);
-  const { profile } = useAuthStore();
+  const { profile, isLoading: isAuthLoading } = useAuthStore();
   
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useFeed();
   
   const posts = data?.pages.flatMap((page) => page.data) || [];
+
+  const { data: suggestedProfiles = [], isLoading: isLoadingSuggestions } = useQuery({
+    queryKey: ['suggested-creators', profile?.id],
+    queryFn: async () => {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      
+      let q = supabase
+        .from('profiles')
+        .select('*')
+        .order('followers_count', { ascending: false })
+        .limit(5);
+        
+      if (profile?.id) {
+        q = q.neq('id', profile.id);
+      }
+      
+      const { data, error } = await q;
+      if (error) throw error;
+      
+      const list = await Promise.all(
+        (data || []).map(async (u) => {
+          let is_following = false;
+          if (profile?.id) {
+            const { data: follow } = await supabase
+              .from('follows')
+              .select('id')
+              .match({ follower_id: profile.id, following_id: u.id })
+              .single();
+            is_following = !!follow;
+          }
+          return { ...u, is_following };
+        })
+      );
+      
+      return list;
+    },
+    enabled: !isAuthLoading,
+  });
 
   return (
     <div className="flex gap-6 max-w-7xl mx-auto w-full">
@@ -115,30 +217,19 @@ export default function HomePage() {
             Who to Follow
           </h3>
           <div className="space-y-3">
-            {suggestedUsers.map((user) => (
-              <div key={user.id} className="flex items-center gap-3">
-                <img
-                  src={user.avatar_url || ''}
-                  alt={user.display_name}
-                  className="w-9 h-9 rounded-full bg-vc-dark-600"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-200 truncate">
-                    {user.display_name}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {user.main_game} · {user.rank}
-                  </p>
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="px-3 py-1 text-xs font-medium bg-vc-dark-600 hover:bg-vc-red-500/20 hover:text-vc-red-400 text-gray-400 rounded-lg transition-colors border border-white/5"
-                >
-                  Follow
-                </motion.button>
+            {isLoadingSuggestions ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-8 bg-vc-dark-600/50 rounded-xl animate-pulse" />
+                ))}
               </div>
-            ))}
+            ) : suggestedProfiles.length > 0 ? (
+              suggestedProfiles.map((user) => (
+                <SuggestedUserItem key={user.id} user={user} />
+              ))
+            ) : (
+              <p className="text-xs text-gray-500">No suggestions available.</p>
+            )}
           </div>
         </div>
 

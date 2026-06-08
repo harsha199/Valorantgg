@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -12,16 +12,32 @@ import {
 } from 'lucide-react';
 import { cn, getRelativeTime as formatRelativeTime, formatNumber } from '@/lib/utils';
 import type { Post } from '@/types';
+import { useToggleLike } from '@/hooks/usePosts';
+import { useAuthStore } from '@/stores/authStore';
+import { useComments, useCreateComment } from '@/hooks/useComments';
 
 interface PostCardProps {
   post: Post;
 }
 
 export function PostCard({ post }: PostCardProps) {
+  const { profile: currentUser } = useAuthStore();
+  const toggleLikeMutation = useToggleLike();
+
   const [liked, setLiked] = useState(post.is_liked ?? false);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [bookmarked, setBookmarked] = useState(post.is_bookmarked ?? false);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [commentInput, setCommentInput] = useState('');
+
+  const { data: comments, isLoading: isLoadingComments } = useComments(post.id);
+  const createCommentMutation = useCreateComment(post.id);
+
+  useEffect(() => {
+    setLiked(post.is_liked ?? false);
+    setLikesCount(post.likes_count);
+  }, [post.is_liked, post.likes_count]);
 
   const author = post.author;
 
@@ -33,17 +49,23 @@ export function PostCard({ post }: PostCardProps) {
     .toUpperCase() ?? 'U';
 
   const handleLike = () => {
+    if (!currentUser) {
+      alert('Please sign in to like posts.');
+      return;
+    }
     if (!liked) {
       setShowHeartBurst(true);
       setTimeout(() => setShowHeartBurst(false), 600);
     }
     setLiked(!liked);
     setLikesCount((prev) => (liked ? prev - 1 : prev + 1));
+    toggleLikeMutation.mutate({ postId: post.id, isCurrentlyLiked: liked });
   };
 
   const handleBookmark = () => {
     setBookmarked(!bookmarked);
   };
+
 
   return (
     <motion.article
@@ -168,7 +190,15 @@ export function PostCard({ post }: PostCardProps) {
             </motion.button>
 
             {/* Comment */}
-            <button className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-vc-cyan-500/10 hover:text-vc-cyan-400">
+            <button 
+              onClick={() => setShowComments(!showComments)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                showComments
+                  ? "text-vc-cyan-400 bg-vc-cyan-500/10"
+                  : "text-gray-500 hover:bg-vc-cyan-500/10 hover:text-vc-cyan-400"
+              )}
+            >
               <MessageCircle size={16} />
               <span>{formatNumber(post.comments_count)}</span>
             </button>
@@ -194,6 +224,98 @@ export function PostCard({ post }: PostCardProps) {
             <Bookmark size={16} className={cn(bookmarked && 'fill-vc-purple-500')} />
           </motion.button>
         </div>
+
+        {/* Comments Section */}
+        <AnimatePresence>
+          {showComments && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-4 border-t border-white/5 pt-4 space-y-4 overflow-hidden"
+            >
+              {/* Write Comment */}
+              <div className="flex gap-3">
+                <div className="w-8 h-8 rounded-full bg-vc-dark-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                  {currentUser?.display_name?.charAt(0) || 'U'}
+                </div>
+                <div className="flex-grow flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Write a comment..." 
+                    value={commentInput}
+                    onChange={(e) => setCommentInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (commentInput.trim() && currentUser) {
+                          createCommentMutation.mutate({ content: commentInput }, {
+                            onSuccess: () => setCommentInput(''),
+                            onError: (err) => alert(`Failed to post comment: ${err.message}`)
+                          });
+                        }
+                      }
+                    }}
+                    className="flex-grow px-3 py-1.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-vc-cyan-500/30"
+                  />
+                  <button 
+                    onClick={() => {
+                      if (commentInput.trim() && currentUser) {
+                        createCommentMutation.mutate({ content: commentInput }, {
+                          onSuccess: () => setCommentInput(''),
+                          onError: (err) => alert(`Failed to post comment: ${err.message}`)
+                        });
+                      }
+                    }}
+                    disabled={createCommentMutation.isPending || !commentInput.trim() || !currentUser}
+                    className="px-3 py-1.5 bg-vc-cyan-500 hover:bg-vc-cyan-600 disabled:bg-vc-dark-600 disabled:text-gray-500 text-white font-medium rounded-xl text-xs transition-colors shrink-0"
+                  >
+                    {createCommentMutation.isPending ? 'Sending...' : 'Reply'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Comments List */}
+              {isLoadingComments ? (
+                <div className="flex justify-center py-4">
+                  <div className="w-5 h-5 border-2 border-vc-cyan-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : comments && comments.length > 0 ? (
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                  {comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-2.5 items-start">
+                      {comment.author?.avatar_url ? (
+                        <img 
+                          src={comment.author.avatar_url} 
+                          alt="" 
+                          className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5" 
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-vc-dark-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5">
+                          {comment.author?.display_name?.charAt(0) || 'U'}
+                        </div>
+                      )}
+                      <div className="bg-vc-dark-600/30 rounded-xl px-3 py-2 border border-white/5 flex-grow">
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="text-xs font-semibold text-gray-200 truncate">
+                            {comment.author?.display_name || 'Gamer'}
+                          </span>
+                          <span className="text-[10px] text-gray-500 whitespace-nowrap">
+                            {formatRelativeTime(comment.created_at)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-300 leading-relaxed break-words">
+                          {comment.content}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 text-center py-2">No comments yet. Be the first to reply!</p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.article>
   );

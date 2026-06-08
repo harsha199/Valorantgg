@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -14,8 +14,9 @@ import {
   Monitor,
   Smartphone,
 } from 'lucide-react';
-import { mockCurrentProfile } from '@/data/mockData';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/authStore';
+import { useUpdateProfile } from '@/hooks/useProfile';
 
 const settingsSections = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -53,11 +54,38 @@ function ToggleSwitch({
 
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<SectionId>('profile');
-  const [displayName, setDisplayName] = useState(
-    mockCurrentProfile.display_name
-  );
-  const [bio, setBio] = useState(mockCurrentProfile.bio || '');
-  const [username, setUsername] = useState(mockCurrentProfile.username);
+  
+  const { profile, setProfile } = useAuthStore();
+  const updateProfileMutation = useUpdateProfile();
+
+  const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
+  const [username, setUsername] = useState('');
+  const [mainGame, setMainGame] = useState('');
+  const [region, setRegion] = useState('');
+  const [rank, setRank] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [bannerUrl, setBannerUrl] = useState('');
+
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.display_name || '');
+      setBio(profile.bio || '');
+      setUsername(profile.username || '');
+      setMainGame(profile.main_game || '');
+      setRegion(profile.region || '');
+      setRank(profile.rank || '');
+      setAvatarUrl(profile.avatar_url || '');
+      setBannerUrl(profile.banner_url || '');
+    }
+  }, [profile]);
+
   const [theme, setTheme] = useState<'dark' | 'midnight' | 'amoled'>('dark');
   const [notifSettings, setNotifSettings] = useState({
     likes: true,
@@ -78,6 +106,85 @@ export default function SettingsPage() {
     steam: false,
     riot: true,
   });
+
+  const handleUploadImage = async (file: File, bucket: 'avatars' | 'banners') => {
+    if (!profile) throw new Error('Not logged in');
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${profile.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error;
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, bucket: 'avatars' | 'banners') => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    if (bucket === 'avatars') setUploadingAvatar(true);
+    else setUploadingBanner(true);
+
+    try {
+      const publicUrl = await handleUploadImage(file, bucket);
+      if (bucket === 'avatars') setAvatarUrl(publicUrl);
+      else setBannerUrl(publicUrl);
+    } catch (err) {
+      alert(`Failed to upload image to ${bucket}`);
+    } finally {
+      if (bucket === 'avatars') setUploadingAvatar(false);
+      else setUploadingBanner(false);
+    }
+  };
+
+  const triggerAvatarUpload = () => avatarInputRef.current?.click();
+  const triggerBannerUpload = () => bannerInputRef.current?.click();
+
+  const handleSave = () => {
+    if (!profile) return;
+    updateProfileMutation.mutate({
+      display_name: displayName,
+      username,
+      bio,
+      main_game: mainGame,
+      region,
+      rank,
+      avatar_url: avatarUrl,
+      banner_url: bannerUrl,
+    }, {
+      onSuccess: (updatedProfile) => {
+        setProfile(updatedProfile);
+        alert('Profile updated successfully!');
+      },
+      onError: (err) => {
+        alert(`Failed to update profile: ${err.message}`);
+      }
+    });
+  };
+
+  if (!profile) {
+    return (
+      <div className="max-w-5xl mx-auto w-full text-center py-12">
+        <p className="text-gray-400">Loading settings...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto w-full">
@@ -153,52 +260,151 @@ export default function SettingsPage() {
                   Edit Profile
                 </h2>
 
-                {/* Avatar */}
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <img
-                      src={mockCurrentProfile.avatar_url || ''}
-                      alt=""
-                      className="w-20 h-20 rounded-full bg-vc-dark-600"
-                    />
-                    <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-vc-red-500 rounded-full flex items-center justify-center hover:bg-vc-red-600 transition-colors">
-                      <Camera size={12} className="text-white" />
+                {/* Banner & Avatar Row */}
+                <div className="space-y-4">
+                  {/* Banner */}
+                  <div className="relative h-36 rounded-xl overflow-hidden bg-vc-dark-600/50 border border-white/5">
+                    {bannerUrl ? (
+                      <img src={bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-vc-red-500/10 via-vc-purple-500/15 to-vc-cyan-500/10" />
+                    )}
+                    <button 
+                      onClick={triggerBannerUpload}
+                      disabled={uploadingBanner}
+                      className="absolute bottom-3 right-3 px-3 py-1.5 bg-black/60 hover:bg-black/80 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                    >
+                      <Camera size={12} />
+                      {uploadingBanner ? 'Uploading...' : 'Change Cover'}
                     </button>
+                    <input 
+                      type="file" 
+                      ref={bannerInputRef} 
+                      onChange={(e) => handleFileChange(e, 'banners')} 
+                      className="hidden" 
+                      accept="image/*"
+                    />
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-200">
-                      Profile Picture
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      JPG, PNG or GIF. Max 2MB
-                    </p>
+
+                  {/* Avatar */}
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          className="w-20 h-20 rounded-full bg-vc-dark-600 object-cover"
+                        />
+                      ) : (
+                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-vc-red-500 to-vc-purple-500 flex items-center justify-center text-xl font-bold">
+                          {displayName.charAt(0) || 'U'}
+                        </div>
+                      )}
+                      <button 
+                        onClick={triggerAvatarUpload}
+                        disabled={uploadingAvatar}
+                        className="absolute -bottom-1 -right-1 w-7 h-7 bg-vc-red-500 rounded-full flex items-center justify-center hover:bg-vc-red-600 transition-colors"
+                      >
+                        <Camera size={12} className="text-white" />
+                      </button>
+                      <input 
+                        type="file" 
+                        ref={avatarInputRef} 
+                        onChange={(e) => handleFileChange(e, 'avatars')} 
+                        className="hidden" 
+                        accept="image/*"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-200">
+                        Profile Picture
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {uploadingAvatar ? 'Uploading picture...' : 'JPG, PNG or GIF. Max 2MB'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 {/* Fields */}
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                      Display Name
-                    </label>
-                    <input
-                      type="text"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-sm text-gray-200 focus:outline-none focus:border-vc-cyan-500/30"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                        Display Name
+                      </label>
+                      <input
+                        type="text"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-sm text-gray-200 focus:outline-none focus:border-vc-cyan-500/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                        Username
+                      </label>
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-sm text-gray-200 focus:outline-none focus:border-vc-cyan-500/30"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                      Username
-                    </label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-sm text-gray-200 focus:outline-none focus:border-vc-cyan-500/30"
-                    />
+                  
+                  {/* Game Stats & Profile Tags */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                        Main Game
+                      </label>
+                      <select
+                        value={mainGame}
+                        onChange={(e) => setMainGame(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-sm text-gray-200 focus:outline-none focus:border-vc-cyan-500/30 cursor-pointer"
+                      >
+                        <option value="">None</option>
+                        <option value="Valorant">Valorant</option>
+                        <option value="CS2">CS2</option>
+                        <option value="League of Legends">League of Legends</option>
+                        <option value="Apex Legends">Apex Legends</option>
+                        <option value="Overwatch 2">Overwatch 2</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                        Region
+                      </label>
+                      <select
+                        value={region}
+                        onChange={(e) => setRegion(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-sm text-gray-200 focus:outline-none focus:border-vc-cyan-500/30 cursor-pointer"
+                      >
+                        <option value="">None</option>
+                        <option value="NA">NA</option>
+                        <option value="EU">EU</option>
+                        <option value="APAC">APAC</option>
+                        <option value="KR">KR</option>
+                        <option value="BR">BR</option>
+                        <option value="LATAM">LATAM</option>
+                        <option value="OCE">OCE</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                        Rank
+                      </label>
+                      <input
+                        type="text"
+                        value={rank}
+                        onChange={(e) => setRank(e.target.value)}
+                        placeholder="e.g. Diamond 2"
+                        className="w-full px-4 py-2.5 bg-vc-dark-600/50 border border-white/5 rounded-xl text-sm text-gray-200 focus:outline-none focus:border-vc-cyan-500/30"
+                      />
+                    </div>
                   </div>
+
                   <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1.5">
                       Bio
@@ -218,9 +424,11 @@ export default function SettingsPage() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
+                  onClick={handleSave}
+                  disabled={updateProfileMutation.isPending}
                   className="px-6 py-2.5 bg-gradient-to-r from-vc-red-500 to-vc-red-600 text-white rounded-xl text-sm font-medium flex items-center gap-2 hover:shadow-lg hover:shadow-vc-red-500/20"
                 >
-                  <Save size={14} /> Save Changes
+                  <Save size={14} /> {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
                 </motion.button>
               </div>
             )}
