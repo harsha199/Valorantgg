@@ -1,10 +1,16 @@
 'use client';
 
 import { useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import { useUIStore } from '@/stores/uiStore';
+
+const GridBackground = dynamic(
+  () => import('@/components/animations/GridBackground'),
+  { ssr: false }
+);
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { mobileMenuOpen, setMobileMenuOpen, theme } = useUIStore();
@@ -15,6 +21,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-vc-dark-900">
+      {/* Three.js Dragon Vandal Background */}
+      <GridBackground variant="home" />
+
       <Navbar />
 
       <div className="flex flex-1">
@@ -51,8 +60,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </AnimatePresence>
 
         {/* Main Content */}
-        <main className="grid-pattern relative flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-4xl px-4 py-6 lg:px-8">
+        <main className="relative flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-4xl px-4 py-6 lg:px-8 relative z-[1]">
             {children}
           </div>
         </main>
@@ -60,3 +69,4 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+

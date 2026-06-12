@@ -9,13 +9,57 @@ import * as THREE from 'three';
    Dragon Vandal – Particle Dragon Silhouette
    Renders a serpentine dragon shape from glowing particles
    that drift and pulse with fire-like energy.
+
+   variant="auth"  → default, subtle behind login forms
+   variant="home"  → brighter dragon, more red fire embers
    ───────────────────────────────────────────────────────── */
+
+export interface GridBackgroundProps {
+  variant?: 'auth' | 'home';
+}
+
+/* ── Config per variant ── */
+function getConfig(variant: 'auth' | 'home') {
+  if (variant === 'home') {
+    return {
+      dragonCount: 6000,
+      dragonSize: 0.08,
+      dragonOpacity: 0.9,
+      emberCount: 2000,
+      emberSize: 0.03,
+      emberOpacity: 0.55,
+      dustCount: 800,
+      dustOpacity: 0.3,
+      lightIntensityMultiplier: 1.6,
+      ringOpacity: 0.3,
+      fogNear: 7,
+      fogFar: 26,
+      cameraZ: 9,
+    };
+  }
+  // auth (default)
+  return {
+    dragonCount: 4000,
+    dragonSize: 0.06,
+    dragonOpacity: 0.7,
+    emberCount: 1200,
+    emberSize: 0.04,
+    emberOpacity: 0.5,
+    dustCount: 600,
+    dustOpacity: 0.25,
+    lightIntensityMultiplier: 1,
+    ringOpacity: 0.2,
+    fogNear: 6,
+    fogFar: 22,
+    cameraZ: 8,
+  };
+}
 
 function generateDragonPoints(count: number): Float32Array {
   const positions = new Float32Array(count * 3);
 
   for (let i = 0; i < count; i++) {
-    const t = (i / count) * Math.PI * 6; // spirals along the body
+    const t = (i / count) * Math.PI * 6;
     const segment = i / count;
 
     // Main serpentine body curve
@@ -34,7 +78,7 @@ function generateDragonPoints(count: number): Float32Array {
     positions[i * 3 + 1] = bodyY + (Math.random() - 0.5) * scatter * 0.6;
     positions[i * 3 + 2] = bodyZ + Math.sin(angle) * scatter;
 
-    // Wing-like appendages at ~30-50% and ~55-75% of body
+    // Wing-like appendages
     if ((segment > 0.28 && segment < 0.48) || (segment > 0.53 && segment < 0.73)) {
       const wingSpread = Math.sin((segment - 0.38) * Math.PI * 5) * 3;
       const side = segment < 0.5 ? 1 : -1;
@@ -45,7 +89,7 @@ function generateDragonPoints(count: number): Float32Array {
       }
     }
 
-    // Horns / head spikes at the top (segment > 0.9)
+    // Horns / head spikes
     if (segment > 0.88) {
       const hornFactor = (segment - 0.88) / 0.12;
       if (Math.random() > 0.6) {
@@ -60,34 +104,22 @@ function generateDragonPoints(count: number): Float32Array {
 }
 
 /* ── Dragon Particle Cloud ── */
-function DragonParticles() {
+function DragonParticles({ count, size, opacity }: {
+  count: number;
+  size: number;
+  opacity: number;
+}) {
   const ref = useRef<THREE.Points>(null!);
-  const count = 4000;
 
   const positions = useMemo(() => generateDragonPoints(count), [count]);
-
-  // Per-particle attributes for animation
-  const { sizes, opacities, phases } = useMemo(() => {
-    const sizes = new Float32Array(count);
-    const opacities = new Float32Array(count);
-    const phases = new Float32Array(count);
-    for (let i = 0; i < count; i++) {
-      sizes[i] = Math.random() * 0.06 + 0.02;
-      opacities[i] = Math.random() * 0.6 + 0.4;
-      phases[i] = Math.random() * Math.PI * 2;
-    }
-    return { sizes, opacities, phases };
-  }, [count]);
 
   useFrame(({ clock }) => {
     if (!ref.current) return;
     const t = clock.getElapsedTime();
-    // Slow rotation of the whole dragon
     ref.current.rotation.y = Math.sin(t * 0.08) * 0.3;
     ref.current.rotation.x = Math.sin(t * 0.05) * 0.1;
     ref.current.rotation.z = Math.cos(t * 0.06) * 0.05;
 
-    // Pulse the scale subtly
     const pulse = 1 + Math.sin(t * 0.4) * 0.03;
     ref.current.scale.setScalar(pulse);
   });
@@ -98,11 +130,11 @@ function DragonParticles() {
         <PointMaterial
           transparent
           color="#FF4655"
-          size={0.06}
+          size={size}
           sizeAttenuation
           depthWrite={false}
           blending={THREE.AdditiveBlending}
-          opacity={0.7}
+          opacity={opacity}
         />
       </Points>
     </group>
@@ -110,23 +142,39 @@ function DragonParticles() {
 }
 
 /* ── Ember / Fire Particle Field ── */
-function EmberField() {
+function EmberField({ count, size, opacity, variant }: {
+  count: number;
+  size: number;
+  opacity: number;
+  variant: 'auth' | 'home';
+}) {
   const ref = useRef<THREE.Points>(null!);
-  const count = 1200;
 
   const { positions, velocities, colors } = useMemo(() => {
     const positions = new Float32Array(count * 3);
     const velocities = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
 
-    const palette = [
-      new THREE.Color('#FF4655'), // Valorant red
-      new THREE.Color('#FF6B75'), // light red
-      new THREE.Color('#FF9F43'), // orange ember
-      new THREE.Color('#FFC048'), // gold spark
-      new THREE.Color('#A855F7'), // purple
-      new THREE.Color('#0FF0FC'), // cyan accent
-    ];
+    // Home variant: heavily red/fire-weighted palette
+    const palette = variant === 'home'
+      ? [
+          new THREE.Color('#FF4655'), // Valorant red
+          new THREE.Color('#FF4655'),
+          new THREE.Color('#FF3344'), // deeper red
+          new THREE.Color('#FF6B75'), // light red
+          new THREE.Color('#E8303D'), // crimson
+          new THREE.Color('#FF9F43'), // orange ember
+          new THREE.Color('#CC2233'), // dark red
+          new THREE.Color('#FF5566'), // warm red
+        ]
+      : [
+          new THREE.Color('#FF4655'),
+          new THREE.Color('#FF6B75'),
+          new THREE.Color('#FF9F43'),
+          new THREE.Color('#FFC048'),
+          new THREE.Color('#A855F7'),
+          new THREE.Color('#0FF0FC'),
+        ];
 
     for (let i = 0; i < count; i++) {
       positions[i * 3] = (Math.random() - 0.5) * 18;
@@ -144,7 +192,7 @@ function EmberField() {
     }
 
     return { positions, velocities, colors };
-  }, [count]);
+  }, [count, variant]);
 
   useFrame(() => {
     if (!ref.current) return;
@@ -156,7 +204,6 @@ function EmberField() {
       arr[i * 3 + 1] += velocities[i * 3 + 1];
       arr[i * 3 + 2] += velocities[i * 3 + 2];
 
-      // Reset particles that float too high
       if (arr[i * 3 + 1] > 7) {
         arr[i * 3] = (Math.random() - 0.5) * 18;
         arr[i * 3 + 1] = -7;
@@ -172,20 +219,19 @@ function EmberField() {
       <PointMaterial
         transparent
         vertexColors
-        size={0.04}
+        size={size}
         sizeAttenuation
         depthWrite={false}
         blending={THREE.AdditiveBlending}
-        opacity={0.5}
+        opacity={opacity}
       />
     </Points>
   );
 }
 
 /* ── Ambient Dust / Sparkle Particles ── */
-function DustField() {
+function DustField({ count, opacity }: { count: number; opacity: number }) {
   const ref = useRef<THREE.Points>(null!);
-  const count = 600;
 
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
@@ -212,18 +258,19 @@ function DustField() {
         sizeAttenuation
         depthWrite={false}
         blending={THREE.AdditiveBlending}
-        opacity={0.25}
+        opacity={opacity}
       />
     </Points>
   );
 }
 
 /* ── Energy Ring ── */
-function EnergyRing({ radius, color, speed, yOffset }: {
+function EnergyRing({ radius, color, speed, yOffset, opacity }: {
   radius: number;
   color: string;
   speed: number;
   yOffset: number;
+  opacity: number;
 }) {
   const ref = useRef<THREE.Mesh>(null!);
 
@@ -243,7 +290,7 @@ function EnergyRing({ radius, color, speed, yOffset }: {
       <meshBasicMaterial
         color={color}
         transparent
-        opacity={0.2}
+        opacity={opacity}
         blending={THREE.AdditiveBlending}
         side={THREE.DoubleSide}
       />
@@ -262,7 +309,6 @@ function CameraRig() {
     mouse.current.y = (e.clientY / window.innerHeight - 0.5) * 2;
   }, []);
 
-  // Register mouse listener
   useMemo(() => {
     if (typeof window !== 'undefined') {
       window.addEventListener('mousemove', handleMouseMove);
@@ -275,7 +321,6 @@ function CameraRig() {
   }, [handleMouseMove]);
 
   useFrame(() => {
-    // Smooth lerp toward mouse position
     target.current.x += (mouse.current.x * 1.2 - target.current.x) * 0.02;
     target.current.y += (-mouse.current.y * 0.8 - target.current.y) * 0.02;
 
@@ -318,49 +363,63 @@ function LightBeam({ position, color, opacity }: {
 }
 
 /* ── Full Scene ── */
-function DragonScene() {
+function DragonScene({ variant }: { variant: 'auth' | 'home' }) {
+  const cfg = getConfig(variant);
+  const lm = cfg.lightIntensityMultiplier;
+
   return (
     <>
       <CameraRig />
 
       {/* Atmosphere */}
-      <fog attach="fog" args={['#0A0A0F', 6, 22]} />
-      <ambientLight intensity={0.05} />
+      <fog attach="fog" args={['#0A0A0F', cfg.fogNear, cfg.fogFar]} />
+      <ambientLight intensity={0.05 * lm} />
 
       {/* Dragon particle body */}
-      <DragonParticles />
+      <DragonParticles
+        count={cfg.dragonCount}
+        size={cfg.dragonSize}
+        opacity={cfg.dragonOpacity}
+      />
 
-      {/* Floating embers */}
-      <EmberField />
+      {/* Floating embers – small red fire particles */}
+      <EmberField
+        count={cfg.emberCount}
+        size={cfg.emberSize}
+        opacity={cfg.emberOpacity}
+        variant={variant}
+      />
 
       {/* Ambient dust */}
-      <DustField />
+      <DustField count={cfg.dustCount} opacity={cfg.dustOpacity} />
 
       {/* Energy rings around the dragon */}
-      <EnergyRing radius={2.2} color="#FF4655" speed={0.15} yOffset={0} />
-      <EnergyRing radius={2.8} color="#A855F7" speed={-0.1} yOffset={0.5} />
-      <EnergyRing radius={1.6} color="#0FF0FC" speed={0.2} yOffset={-0.8} />
+      <EnergyRing radius={2.2} color="#FF4655" speed={0.15} yOffset={0} opacity={cfg.ringOpacity} />
+      <EnergyRing radius={2.8} color="#A855F7" speed={-0.1} yOffset={0.5} opacity={cfg.ringOpacity} />
+      <EnergyRing radius={1.6} color="#0FF0FC" speed={0.2} yOffset={-0.8} opacity={cfg.ringOpacity} />
 
       {/* Volumetric light beams */}
-      <LightBeam position={[-3, 0, -2]} color="#FF4655" opacity={0.06} />
-      <LightBeam position={[4, 0, -3]} color="#A855F7" opacity={0.04} />
-      <LightBeam position={[1, 0, -1.5]} color="#0FF0FC" opacity={0.035} />
+      <LightBeam position={[-3, 0, -2]} color="#FF4655" opacity={0.06 * lm} />
+      <LightBeam position={[4, 0, -3]} color="#A855F7" opacity={0.04 * lm} />
+      <LightBeam position={[1, 0, -1.5]} color="#0FF0FC" opacity={0.035 * lm} />
 
       {/* Colored point lights for volumetric glow on the dragon */}
-      <pointLight position={[0, 2, 2]} color="#FF4655" intensity={3} distance={8} decay={2} />
-      <pointLight position={[-2, -1, 1]} color="#A855F7" intensity={2} distance={6} decay={2} />
-      <pointLight position={[2, -2, 3]} color="#0FF0FC" intensity={1.5} distance={6} decay={2} />
-      <pointLight position={[0, 0, 0]} color="#FF9F43" intensity={1} distance={4} decay={2} />
+      <pointLight position={[0, 2, 2]} color="#FF4655" intensity={3 * lm} distance={8} decay={2} />
+      <pointLight position={[-2, -1, 1]} color="#A855F7" intensity={2 * lm} distance={6} decay={2} />
+      <pointLight position={[2, -2, 3]} color="#0FF0FC" intensity={1.5 * lm} distance={6} decay={2} />
+      <pointLight position={[0, 0, 0]} color="#FF9F43" intensity={1 * lm} distance={4} decay={2} />
     </>
   );
 }
 
 /* ── Exported Component ── */
-export default function GridBackground() {
+export default function GridBackground({ variant = 'auth' }: GridBackgroundProps) {
+  const cfg = getConfig(variant);
+
   return (
     <div className="pointer-events-none fixed inset-0" style={{ zIndex: 0 }}>
       <Canvas
-        camera={{ position: [0, 0, 8], fov: 55, near: 0.1, far: 30 }}
+        camera={{ position: [0, 0, cfg.cameraZ], fov: 55, near: 0.1, far: 30 }}
         gl={{
           antialias: true,
           alpha: true,
@@ -370,7 +429,7 @@ export default function GridBackground() {
         style={{ background: 'transparent' }}
       >
         <Suspense fallback={null}>
-          <DragonScene />
+          <DragonScene variant={variant} />
         </Suspense>
       </Canvas>
     </div>
