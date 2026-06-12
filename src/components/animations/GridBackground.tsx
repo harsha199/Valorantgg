@@ -155,7 +155,7 @@ function EmberField({ count, size, opacity, variant }: {
     const velocities = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
 
-    // Home variant: heavily red/fire-weighted palette
+    // Home variant: red + blue fire palette
     const palette = variant === 'home'
       ? [
           new THREE.Color('#FF4655'), // Valorant red
@@ -163,15 +163,15 @@ function EmberField({ count, size, opacity, variant }: {
           new THREE.Color('#FF3344'), // deeper red
           new THREE.Color('#FF6B75'), // light red
           new THREE.Color('#E8303D'), // crimson
-          new THREE.Color('#FF9F43'), // orange ember
+          new THREE.Color('#3B82F6'), // blue
           new THREE.Color('#CC2233'), // dark red
-          new THREE.Color('#FF5566'), // warm red
+          new THREE.Color('#2563EB'), // deeper blue
         ]
       : [
           new THREE.Color('#FF4655'),
           new THREE.Color('#FF6B75'),
-          new THREE.Color('#FF9F43'),
-          new THREE.Color('#FFC048'),
+          new THREE.Color('#3B82F6'), // blue
+          new THREE.Color('#60A5FA'), // light blue
           new THREE.Color('#A855F7'),
           new THREE.Color('#0FF0FC'),
         ];
@@ -253,7 +253,7 @@ function DustField({ count, opacity }: { count: number; opacity: number }) {
     <Points ref={ref} positions={positions} stride={3} frustumCulled={false}>
       <PointMaterial
         transparent
-        color="#ffffff"
+        color="#60A5FA"
         size={0.015}
         sizeAttenuation
         depthWrite={false}
